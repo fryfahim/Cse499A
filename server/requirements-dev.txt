@@ -1,0 +1,5 @@
+# Local test environment (no GPU, no torch needed).
+-r requirements.txt
+pillow
+pytest
+httpx
