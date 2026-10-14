@@ -92,6 +92,12 @@ services.
    it (allow "install unknown apps" when asked). From a terminal:
    `cd android && ./gradlew assembleDebug`.
 
+   *No Android Studio at all?* GitHub Actions builds the app on every push
+   (`.github/workflows/ci.yml`). Open the repository's **Actions** tab → the
+   latest green **CI** run → *Artifacts* → download
+   **rocov2-bangla-debug-apk**, unzip it, copy `app-debug.apk` to the phone
+   and open it.
+
 ### Step 3: Connect the app to Colab
 
 1. In the app tap the **gear** (or the grey "Not configured" chip) → **Scan QR**
@@ -225,6 +231,9 @@ pip install -r requirements-dev.txt && pytest -q
 cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android SDK
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs both on every push and pull
+request, and keeps the debug APK as a downloadable artifact.
+
 ## Verification status
 
 | what | status |
@@ -232,7 +241,7 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 | Server `pytest`: 53 tests (**mock** model; real notebook `side_check` and prompts) | passing |
 | Notebook `ROCOv2_Bangla_API_server.ipynb`: every code cell from section 4 on, executed locally with a **fake** model, fake Colab Secrets and a fake ngrok SDK pointed at localhost | ran end to end: identical-output check, 512 px shrink, amber warning, QR, real HTTP job |
 | Android logic: 50 unit tests | passing in a JVM-only harness (Kotlin 2.2.21, the app's Retrofit/OkHttp/serialization versions, small `androidx.lifecycle` stand-ins) |
-| `./gradlew assembleDebug testDebugUnitTest` | **not run yet**: the environment this was written in could not reach Google's Maven repository or download the Android SDK. Compose UI code has not been compiled. Run it in Android Studio (step 2). |
+| `./gradlew assembleDebug testDebugUnitTest` | runs in GitHub Actions (job **Android build + unit tests**); see the latest CI run. The environments this was written in could not reach Google's Maven repository, so it has not been run locally. Compose UI code was reviewed by hand (APIs, icons, resource references) but CI is the first real compile. |
 | Real model on a Colab GPU | **needs your live Colab session**: sections 8 and 10, then the checklist below |
 
 ## Troubleshooting
