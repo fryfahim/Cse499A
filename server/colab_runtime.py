@@ -159,6 +159,19 @@ def _forward_off_event_loop(ngrok_module, addr: str, options: dict, timeout: flo
 
     def run() -> None:
         try:
+            # This process serves one tunnel. Close any left over from earlier
+            # runs of the cell: the free plan allows only a few per session
+            # (ERR_NGROK_324) and a static domain only once (ERR_NGROK_334).
+            kill = getattr(ngrok_module, "kill", None)
+            if kill is not None:
+                try:
+                    done = kill()
+                    if inspect.isawaitable(done):
+                        async def _await_kill(r=done):
+                            return await r
+                        asyncio.run(_await_kill())
+                except Exception:  # noqa: BLE001 - nothing to close
+                    pass
             result = ngrok_module.forward(addr, **options)
             if inspect.isawaitable(result):
                 async def _await(r=result):

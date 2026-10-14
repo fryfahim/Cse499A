@@ -108,3 +108,21 @@ def test_start_ngrok_errors_propagate():
 
     with pytest.raises(RuntimeError, match="ERR_NGROK_334"):
         start_ngrok(8000, authtoken="tok", ngrok_module=FailingNgrok())
+
+
+def test_start_ngrok_closes_leftover_tunnels_first():
+    class KillTrackingNgrok(FakeNgrok):
+        def __init__(self, url):
+            super().__init__(url)
+            self.events = []
+
+        def kill(self):
+            self.events.append("kill")
+
+        def forward(self, addr, **options):
+            self.events.append("forward")
+            return super().forward(addr, **options)
+
+    fake = KillTrackingNgrok("https://my-demo.ngrok-free.app")
+    start_ngrok(8000, authtoken="tok", ngrok_module=fake)
+    assert fake.events == ["kill", "forward"]
