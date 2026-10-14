@@ -1,0 +1,8 @@
+# Server packages installed in Colab AFTER the model has loaded.
+# Installed with a constraints file built from `pip freeze`, so pip cannot
+# upgrade or reinstall torch, transformers, trl or anything else already present.
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+qrcode[pil]>=7.4
+ngrok>=1.4   # official ngrok SDK (default tunnel)

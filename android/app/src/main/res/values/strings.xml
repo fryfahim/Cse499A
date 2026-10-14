@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ROCOv2 Bangla</string>
+    <string name="tagline">Radiology image → simple Bangla explanation</string>
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+
+    <!-- Connection chip -->
+    <string name="conn_not_configured">Not configured</string>
+    <string name="conn_checking">Checking…</string>
+    <string name="conn_ready">Ready</string>
+    <string name="conn_busy">Busy (%1$d in queue)</string>
+    <string name="conn_loading">Model loading</string>
+    <string name="conn_model_error">Server error</string>
+    <string name="conn_offline">Offline</string>
+    <string name="conn_cd">Server connection: %1$s. Opens settings.</string>
+
+    <!-- Image picker -->
+    <string name="picker_title">Radiology image</string>
+    <string name="picker_empty">Pick a JPEG, PNG or WebP image (max 10 MB).</string>
+    <string name="pick_image">Pick image</string>
+    <string name="replace">Replace</string>
+    <string name="remove">Remove</string>
+    <string name="image_meta">%1$s · %2$d × %3$d px</string>
+    <string name="image_preview_cd">Selected radiology image</string>
+
+    <!-- Caption -->
+    <string name="caption_label">English caption (optional — improves accuracy)</string>
+    <string name="caption_helper">Paste the image\'s English report caption. This is not a question box.</string>
+    <string name="caption_empty_note">Without a caption the model uses the image only (less accurate).</string>
+    <string name="caption_counter">%1$d / %2$d</string>
+
+    <string name="analyze">Analyze</string>
+    <string name="analyze_disabled_no_image">Pick an image first.</string>
+    <string name="analyze_disabled_connection">The server is not ready. Check the connection chip above.</string>
+
+    <!-- Disclaimer. disclaimer_bn is the exact DISCLAIMER_BN text from the notebook. -->
+    <string name="disclaimer_bn">এটি শুধু ছবি বোঝার জন্য সাহায্য। এটি ডাক্তারের পরামর্শ নয়। অনুগ্রহ করে ডাক্তার দেখান।</string>
+    <string name="disclaimer_en">AI-generated explanation for learning only. It may be wrong and is not medical advice. Please see a doctor.</string>
+
+    <!-- Analyzing -->
+    <string name="analyzing_title">Analyzing</string>
+    <string name="status_uploading">Uploading image…</string>
+    <string name="status_checking">Checking job status…</string>
+    <string name="status_queue_next">In queue: next</string>
+    <string name="status_queue_ahead">In queue: %1$d ahead</string>
+    <string name="status_generating">Generating…</string>
+    <string name="elapsed">Elapsed %1$s</string>
+    <string name="analyzing_note">The model runs on a free Colab GPU and can be slow. Keep this screen open.</string>
+    <string name="stop_waiting">Stop waiting</string>
+    <string name="stop_waiting_note">Stops waiting on this phone; the server may still finish the job.</string>
+    <string name="notice_stopped">Stopped waiting. The server may still finish that job.</string>
+
+    <!-- Result -->
+    <string name="result_title">Explanation</string>
+    <string name="result_label">AI-generated explanation · may be wrong</string>
+    <string name="show_image">Show image</string>
+    <string name="hide_image">Hide image</string>
+    <string name="side_ok_title">Left/right check: matches the caption</string>
+    <string name="side_warning_title">Left/right mismatch with caption — do not trust this answer</string>
+    <string name="side_not_checked_title">Left/right not checked</string>
+    <string name="mode_caption">With caption</string>
+    <string name="mode_image_only">Image only</string>
+    <string name="took">Model time %1$s</string>
+    <string name="caption_used_label">Caption used</string>
+    <string name="copy">Copy</string>
+    <string name="copied">Copied</string>
+    <string name="copy_label">Bangla explanation</string>
+    <string name="copy_suffix">(AI-generated, may be wrong)</string>
+    <string name="analyze_again">Analyze again</string>
+    <string name="new_image">New image</string>
+
+    <!-- Errors -->
+    <string name="error_title">Something went wrong</string>
+    <string name="retry">Retry</string>
+    <string name="open_settings">Open Settings</string>
+    <string name="pick_another">Pick another image</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="err_invalid_image">The server could not read this file as a JPEG, PNG or WebP image. Pick another image.</string>
+    <string name="err_too_large">The image is over 10 MB. Pick a smaller image.</string>
+    <string name="err_unsupported_type">This file type is not supported. Pick a JPEG, PNG or WebP image.</string>
+    <string name="err_image_unreadable">This image could not be opened. Pick it again or pick another image.</string>
+    <string name="err_model_not_ready">The model is still loading in Colab. Wait a minute, then retry.</string>
+    <string name="err_queue_full">The server is busy (queue full). Wait a minute, then retry.</string>
+    <string name="err_empty_output">The model returned an empty answer. Retry, or add the English caption.</string>
+    <string name="err_inference_failed">The model failed while generating (for example, the GPU ran out of memory). Retry.</string>
+    <string name="err_unauthorized">The API key was not accepted. Scan the new QR code from the Colab notebook.</string>
+    <string name="err_job_not_found">The server no longer has this job. Colab may have restarted. Retry to submit again.</string>
+    <string name="err_offline">Cannot reach the server. Colab may have stopped. Re-run the Colab notebook; if the URL or key changed, scan the new QR code.</string>
+    <string name="err_timeout">No answer after 5 minutes. The server may be overloaded or Colab may have stopped. Retry.</string>
+    <string name="err_not_configured">No server set up yet. Open Settings and scan the QR code from Colab.</string>
+    <string name="err_server_error">The server sent an unexpected answer. Check the URL in Settings, then retry.</string>
+
+    <!-- Settings -->
+    <string name="section_server">Colab server</string>
+    <string name="server_help">In Colab, run the server notebook. Section 9 prints a URL, an API key and a QR code. With an ngrok static domain and the APP_API_KEY secret, both stay the same after a restart; otherwise scan the new QR code.</string>
+    <string name="url_label">Server URL</string>
+    <string name="url_placeholder">https://….ngrok-free.app</string>
+    <string name="key_label">API key</string>
+    <string name="show">Show</string>
+    <string name="hide">Hide</string>
+    <string name="show_key_cd">Show API key</string>
+    <string name="hide_key_cd">Hide API key</string>
+    <string name="scan_qr">Scan QR</string>
+    <string name="save">Save</string>
+    <string name="test_connection">Test connection</string>
+    <string name="url_err_empty">Enter the server URL.</string>
+    <string name="url_err_https">The URL must start with https://</string>
+    <string name="url_err_malformed">This does not look like a valid URL.</string>
+    <string name="key_err_missing">Enter the API key.</string>
+    <string name="test_running">Testing…</string>
+    <string name="test_ok_ready">Connected. Key accepted. Model ready.</string>
+    <string name="test_ok_ready_busy">Connected. Key accepted. Model ready, %1$d job(s) waiting.</string>
+    <string name="test_ok_loading">Connected. Key accepted. The model is still loading.</string>
+    <string name="test_ok_error">Connected. Key accepted. The server reports a model error.</string>
+    <string name="notice_saved">Saved</string>
+    <string name="notice_qr_invalid">This QR code is not from the Colab server cell.</string>
+    <string name="notice_scanner_unavailable">QR scanner unavailable. Paste the URL and key instead.</string>
+
+    <string name="section_model">Model</string>
+    <string name="model_base_label">Base model</string>
+    <string name="model_base">unsloth/Qwen3.5-4B (vision-language)</string>
+    <string name="model_finetune_label">Fine-tune</string>
+    <string name="model_finetune">LoRA adapter (r = 16, alpha = 16) on vision and language layers, 16-bit</string>
+    <string name="model_data_label">Training data</string>
+    <string name="model_data">231 verified ROCOv2 rows: 208 for training, 23 held out. Images from the ROCOv2 test split, shrunk to 512 px. 3 epochs.</string>
+    <string name="model_task_label">Output</string>
+    <string name="model_task">2–3 short, simple Bangla sentences: which body part and what problem. No treatment advice.</string>
+    <string name="model_decoding_label">Decoding</string>
+    <string name="model_decoding">Greedy, up to 512 new tokens</string>
+    <string name="model_not_chat">This is not a chat or question-answering model. The caption box takes the image\'s English caption, not questions.</string>
+
+    <string name="section_privacy">Privacy</string>
+    <string name="privacy_text">Images are sent to a temporary Colab server, kept in memory only, deleted after processing. Do not use real patient images.</string>
+    <string name="privacy_key">The server URL and API key are stored only on this phone and are not backed up.</string>
+
+    <string name="section_limitations">Limitations</string>
+    <string name="limit_1">Research prototype, not a diagnostic tool. The explanation may be wrong.</string>
+    <string name="limit_2">Trained on a small set (208 examples). It mainly learned the style of the Bangla answers, not medical knowledge.</string>
+    <string name="limit_3">Works best with the English caption. Image-only mode is weaker.</string>
+    <string name="limit_4">Runs on a free Colab GPU through an ngrok tunnel: slow, and it stops when Colab disconnects. Without an ngrok static domain the URL changes on every restart.</string>
+    <string name="limit_5">The server shrinks images to 512 px like training did. The prompt puts the image before the text, as the inference notebook did (training used text first).</string>
+    <string name="limit_6">The left/right check only compares the words left/right in the caption with the Bangla answer.</string>
+
+    <string name="section_about">About</string>
+    <string name="version">Version %1$s</string>
+    <string name="font_license">Bangla text uses the bundled Noto Sans Bengali font (SIL Open Font License 1.1).</string>
+</resources>

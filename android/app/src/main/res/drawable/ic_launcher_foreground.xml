@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scan frame with a simple chest outline. 108dp canvas, content inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/launcher_foreground"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M33,42 L33,33 L42,33 M66,33 L75,33 L75,42 M75,66 L75,75 L66,75 M42,75 L33,75 L33,66" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/launcher_foreground"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M54,42 L54,66 M54,48 C47,46 42,52 42,60 C42,65 45,67 49,66 C52,65 53,62 53,58 M54,48 C61,46 66,52 66,60 C66,65 63,67 59,66 C56,65 55,62 55,58" />
+</vector>
