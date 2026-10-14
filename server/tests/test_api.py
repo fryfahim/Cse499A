@@ -195,7 +195,8 @@ def test_lifecycle_with_caption(client, explain):
     assert res["bangla_text"] == explain.text
     assert res["mode"] == "caption"
     assert res["caption_used"] == "Chest X-ray showing left pneumothorax"
-    assert res["side_check"] == {"level": "ok", "message": "Side check passed."}
+    assert res["side_check"]["level"] == "ok"
+    assert res["side_check"]["message"].startswith("Left/right check passed")
     assert res["disclaimer_bn"] == DISCLAIMER_BN
     assert isinstance(res["elapsed_ms"], int) and res["elapsed_ms"] >= 0
     assert explain.calls[0]["caption"] == "Chest X-ray showing left pneumothorax"
@@ -216,7 +217,7 @@ def test_side_check_warning_reaches_client(client, explain):
     client.queue.run_next()
     res = client.get(f"/api/v1/jobs/{job_id}", headers=AUTH).json()["result"]
     assert res["side_check"]["level"] == "warning"
-    assert res["side_check"]["message"].startswith("WARNING")
+    assert res["side_check"]["message"] == "WARNING: caption says LEFT but the Bangla says RIGHT. Do not trust this answer."
 
 
 def test_side_check_crash_is_not_checked(make_client):

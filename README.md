@@ -12,228 +12,267 @@ and what problem it has.
 > patient data**, so use only public dataset images such as ROCOv2.
 
 ```
-Android app ──HTTPS──> cloudflared quick tunnel ──> FastAPI (uvicorn thread in the Colab runtime)
-                                                     └─> one GPU worker ──> model.generate() ──> result
+Android app ──HTTPS──> cloudflared quick tunnel ──> FastAPI (background thread in the Colab runtime)
+                                                     └─> one GPU worker ──> the notebook's model ──> result
 ```
+
+---
+
+## How to run it
+
+You need: the Google account whose Drive holds `qwen_lora_bangla_radiology`
+(saved by the fine-tune notebook), a computer with Android Studio, and an
+Android phone (Android 8.0 or newer) with Google Play services.
+
+### Step 1: Start the server in Colab (about 10–15 min the first time)
+
+1. Download **`colab/ROCOv2_Bangla_API_server.ipynb`** from this repository
+   and open it in Google Colab (*File › Upload notebook*).
+2. *Runtime › Change runtime type › **T4 GPU*** › Save.
+3. Run the cells **from top to bottom**:
+
+   | section | what it does | required? |
+   |---|---|---|
+   | 1. Install | the same install as your notebooks (torch 2.8.0, transformers 5.2.0, trl 0.22.2, unsloth, causal_conv1d 1.6.0). Silent for a few minutes. | yes |
+   | 2. Settings | `ADAPTER_PATH = /content/drive/MyDrive/qwen_lora_bangla_radiology` | yes |
+   | 3. Drive + model | mount Drive (allow access), load the adapter | yes |
+   | 4. Prompt + `explain()` + `side_check()` | unchanged from your inference notebook | yes |
+   | 5. Server packages | installs fastapi/uvicorn/qrcode **without changing torch/transformers** (it checks), downloads the server code | yes |
+   | 6. Connect the model | checks the server's copy of the prompts/`side_check` is identical to section 4, wraps the loaded model | yes |
+   | 7. Demo images | saves 5 ROCOv2 test images + captions to Drive folder `rocov2_demo_images` | optional |
+   | 8. Parity + latency | proves the server gives the same text as `explain()`, and measures real seconds per image on your T4 | optional, do it once |
+   | 9. Start the API | prints the **Server URL**, **API key** and a **QR code** | yes |
+   | 10. Self-test | sends one real job through the public URL | optional |
+
+4. **Leave the Colab tab open** while you use the app.
+
+### Step 2: Build and install the app (once)
+
+1. Install **Android Studio** (stable version) from developer.android.com.
+2. Get the code: *File › New › Project from Version Control* →
+   `https://github.com/fryfahim/Cse499A.git`, branch
+   `claude/rocov2-bangla-android-app-1mhf6u` (or `main` once merged), or
+   download the repository ZIP.
+3. *File › Open* → choose the **`android/`** folder (not the repo root).
+   Wait for "Gradle sync" to finish; Studio downloads the Android SDK and
+   libraries automatically. If it offers to update a library or the Android
+   Gradle plugin version, accept.
+4. On the phone: *Settings › About phone* → tap **Build number** 7 times →
+   *Developer options* → turn on **USB debugging**. Connect the phone by USB
+   and allow the computer.
+5. In Android Studio pick your phone in the device list and press **Run ▶**.
+   The app **ROCOv2 Bangla** opens.
+
+   *No cable?* *Build › Build App Bundle(s)/APK(s) › Build APK(s)*, then copy
+   `android/app/build/outputs/apk/debug/app-debug.apk` to the phone and open
+   it (allow "install unknown apps" when asked). From a terminal:
+   `cd android && ./gradlew assembleDebug`.
+
+### Step 3: Connect the app to Colab
+
+1. In the app tap the **gear** (or the grey "Not configured" chip) → **Scan QR**
+   → point the camera at the QR code from section 9. (No camera permission is
+   needed; Google's scanner does it.) Or type the URL and key by hand → **Save**.
+2. The app runs **Test connection**: "Connected. Key accepted. Model ready."
+3. Go back. The chip on the home screen shows **Ready** (green dot).
+
+### Step 4: Analyze an image
+
+1. **Pick image** → choose a radiology image (JPEG/PNG/WebP, ≤ 10 MB).
+   Demo images from section 7: on the phone open the **Google Drive** app →
+   `rocov2_demo_images` → ⋮ → **Download**, then pick them in the app.
+2. Paste the image's **English caption** (from `captions.txt` in the same
+   Drive folder). It is optional but improves accuracy. It is **not** a
+   question box.
+3. Tap **Analyze**. The app shows the real queue position, then
+   "Generating…", with a timer. In float32 on a T4 this takes a while.
+4. The result screen shows the Bangla explanation, the left/right check
+   (green / **amber** / grey), the mode, the model time and the disclaimer.
+   **Copy**, **Analyze again** or **New image**.
+
+Try **`ROCOv2_2023_test_000384`** with its caption *"Focal right upper lobar
+opacity on chest X-ray"*. In the fine-tune notebook's held-out results the
+model answered বাম (left) for this right-sided finding, so the app should
+show the **amber** "Left/right mismatch with caption — do not trust this
+answer" banner.
+
+### When Colab stops
+
+Colab disconnects after idling and after ~12 h, and the tunnel URL and key
+change every time section 9 runs. The app then shows **Offline**. Fix: run the
+notebook again from the top, then **Settings › Scan QR** again.
+
+---
+
+## What the notebooks say, and how the server follows them
+
+The server was checked against `ROCOv2_Bangla_Qwen35_4B_finetune_232.ipynb`,
+`ROCOv2_Bangla_Qwen35_4B_inference_app.ipynb` and `verified_dataset_232.xlsx`:
+
+* **Prompts, `make_prompt`, `DISCLAIMER_BN`, `side_check`** are copied
+  byte-for-byte from the inference notebook into `server/notebook_logic.py`.
+  Their SHA-256 is pinned in the tests, and notebook section 6 asserts they
+  equal the notebook's own definitions. The fine-tune notebook uses the same
+  two prompts.
+* **`explain()`** is mirrored line for line in `server/inference.py`: image
+  first, `enable_thinking=False`, greedy, 512 new tokens, repetition penalty
+  1.05, `batch_decode` of the new tokens, `.strip()`. Notebook section 8 checks
+  that the server code and `explain()` give identical text.
+* **Data:** 231 rows (`ImageID`, `Bangla_meaning`, `Captions`), all matched in
+  HF `eltorio/ROCOv2-radiology` split `test`. Seeded shuffle gave 208 train /
+  23 held out. 3 epochs, eval loss 0.601 → 0.541 → 0.529.
+
+### Differences between training and inference, handled openly
+
+1. **Image size.** Training ran `convert("RGB")` then `thumbnail((512, 512))`.
+   The inference notebook's upload cell sends the full-resolution image (it
+   only shrinks the preview). The server shrinks to 512 px by default
+   (`MAX_IMG_SIDE = 512`), because those are the only image sizes the adapter
+   saw. It also means fewer image tokens, so inference is faster and less
+   likely to run out of memory. `None` restores full resolution.
+2. **Content order.** Training conversations are `[text, image]`. The
+   inference notebook's `explain()` is `[image, text]`. The server keeps
+   `[image, text]` (`CONTENT_ORDER = IMAGE_FIRST`) because it is the tested
+   path. Note that the fine-tune notebook's own held-out evaluation also used
+   `[image, text]` on 512 px images, which is exactly the server's default.
+   `TEXT_FIRST` switches to the training order.
+3. **EXIF rotation.** Phone photos can carry an EXIF orientation tag. The
+   server applies `ImageOps.exif_transpose` before converting to RGB. The
+   notebooks did not, which makes no difference for ROCOv2 images.
+
+### Corrections to the original brief
+
+* `ROCOv2_2023_test_000018` (caption "Large left-sided pneumothorax…") is a
+  **training** image. In the inference notebook the model answered বাম (left)
+  and the left/right check **passed**. It is not a mismatch example.
+* The real mismatch in the saved notebooks is the held-out image
+  **`ROCOv2_2023_test_000384`**: the caption says *right*, the model said
+  *left*, and `side_check` returns `WARNING: caption says RIGHT but the Bangla
+  says LEFT`. It is used in the checklist and in the tests.
+* The inference notebook's "28 verified samples" text is stale (231 rows).
+
+---
 
 ## Repository layout
 
 ```
+colab/ROCOv2_Bangla_API_server.ipynb  ready-to-run Colab notebook (sections 1-4 of your inference notebook + the API)
+colab/serve_cells.md             the API cells alone, to paste after section 4 of the inference notebook
 android/                         Android Studio project (Kotlin, Jetpack Compose, Material 3)
   app/src/main/java/edu/cse499a/rocobangla/
-    MainActivity.kt              single activity, edge-to-edge, sets the Compose theme + nav host
+    MainActivity.kt              single activity, edge-to-edge, theme + navigation
     RocoBanglaApp.kt             Application; owns the AppContainer
     core/AppConfig.kt            limits and timings (10 MB, 1000 chars, 2 s poll, 5 min timeout)
-    core/AppError.kt             AppError, ErrorAction, and the server-code / HTTP / exception mapping
-    core/ServerSettings.kt       URL+key model, https-only URL check, QR payload parser
-    data/Dtos.kt                 kotlinx.serialization DTOs for the API
-    data/Models.kt               app models (Outcome, JobState, AnalysisResult…) and DTO mapping
+    core/AppError.kt             error types, next-step actions, server-code / HTTP / exception mapping
+    core/ServerSettings.kt       URL + key, https-only URL check, QR payload parser
+    data/Dtos.kt, Models.kt      API DTOs and app models (+ mapping)
     data/RocoApi.kt              Retrofit interface, OkHttp client, per-URL Retrofit factory
-    data/NetworkAnalysisRepository.kt  calls the API, maps every failure to an AppError
-    data/AnalysisRepository.kt   repository interface (faked in tests)
-    data/SettingsRepository.kt   settings interface
-    data/DataStoreSettingsRepository.kt  URL + key in DataStore (no backup)
-    data/ImageInspector.kt       interfaces for reading picked images and streaming uploads
-    data/ContentUriImages.kt     ContentResolver metadata + streaming multipart body (no Base64, no resize)
+    data/NetworkAnalysisRepository.kt  API calls; every failure becomes an AppError
+    data/AnalysisRepository.kt, SettingsRepository.kt, ImageInspector.kt   interfaces (faked in tests)
+    data/DataStoreSettingsRepository.kt  URL + key in DataStore (excluded from backup)
+    data/ContentUriImages.kt     ContentResolver metadata + streaming multipart upload (no Base64, no resize)
     data/AppContainer.kt         manual dependency injection
-    ui/AppNavHost.kt             Navigation Compose: analyze ↔ settings
-    ui/ViewModelFactories.kt     ViewModel factories (SavedStateHandle for the analyze flow)
-    ui/analyze/AnalyzeUiState.kt state machine types + connection chip states
-    ui/analyze/AnalyzeViewModel.kt  Idle → ImageSelected → Submitting → Queued/Running → Success | Error
-    ui/analyze/AnalyzeRoute.kt   picks Home / Analyzing / Result from the phase; photo picker; back handling
-    ui/analyze/HomeScreen.kt     connection chip, image picker card, caption field, Analyze, disclaimer
-    ui/analyze/AnalyzingScreen.kt  real queue position / status, elapsed time, Stop waiting
-    ui/analyze/ResultScreen.kt   Bangla text, left/right banner, mode/time/timestamp, Copy / Again / New
-    ui/settings/SettingsViewModel.kt  URL/key editing, QR import, Test connection
-    ui/settings/SettingsScreen.kt     server, model info, privacy, limitations, version
-    ui/components/Components.kt  cards, chip, disclaimer, side-check banner, error card
-    ui/theme/                    colours, typography (bundled Noto Sans Bengali), shapes, spacing
-  app/src/main/res/font/         Noto Sans Bengali Regular + SemiBold (SIL OFL 1.1, licence in assets/licenses)
-  app/src/test/…                 unit tests: ViewModels, error mapping, URL/QR parsing, DTO mapping, repository (MockWebServer)
+    ui/AppNavHost.kt, ui/ViewModelFactories.kt   navigation and ViewModel factories
+    ui/analyze/                  state machine ViewModel + Home / Analyzing / Result screens
+    ui/settings/                 server URL/key, Scan QR, Test connection, model info, privacy, limitations
+    ui/components/Components.kt  cards, connection chip, disclaimer, left/right banner, error card
+    ui/theme/                    colours, Noto Sans Bengali typography, shapes, spacing
+  app/src/main/res/font/         Noto Sans Bengali Regular + SemiBold (SIL OFL 1.1)
+  app/src/test/…                 unit tests (ViewModels, error mapping, parsing, repository via MockWebServer)
 server/
-  app.py                         FastAPI app; explain_fn and side_check_fn are injected (testable without a GPU)
-  worker.py                      FIFO queue (cap 5), single GPU worker thread, in-memory job store, 15 min expiry
-  inference.py                   wraps the notebook's model/tokenizer into explain_fn (chat template, greedy decode)
-  colab_runtime.py               uvicorn-in-a-thread, cloudflared/ngrok tunnel, URL + key + QR printout
-  requirements.txt               server packages for Colab (installed with a constraints file)
-  requirements-dev.txt           local test dependencies
-  tests/                         pytest suite (uses a clearly labelled MOCK explain_fn)
-colab/serve_cells.md             the exact cells to paste after section 4 of the inference notebook
+  notebook_logic.py              prompts, make_prompt, DISCLAIMER_BN, side_check: verbatim from the inference notebook
+  inference.py                   explain_fn: the notebook's explain(), plus the content-order flag
+  app.py                         FastAPI app (explain_fn / side_check_fn injected; testable without a GPU)
+  worker.py                      FIFO queue (cap 5), single GPU worker thread, in-memory jobs, 15 min expiry
+  colab_runtime.py               uvicorn thread, cloudflared/ngrok, URL + key + QR, demo-image fetcher
+  requirements.txt, requirements-dev.txt
+  tests/                         pytest (API tests use a clearly labelled MOCK model)
 API.md                           the API contract
 ```
-
-## Setup
-
-### 1. Colab (server)
-
-1. Open `ROCOv2_Bangla_Qwen35_4B_inference_app (2).ipynb` in Colab with a
-   **T4 GPU** runtime.
-2. Run the notebook up to and including **section 4**: install the pinned
-   stack (torch 2.8.0, transformers 5.2.0, trl 0.22.2, unsloth, causal_conv1d
-   1.6.0), mount Drive, load the adapter from
-   `/content/drive/MyDrive/qwen_lora_bangla_radiology` with
-   `FastVisionModel.from_pretrained(ADAPTER_PATH, load_in_4bit=False)` and
-   `FastVisionModel.for_inference(model)`, and define the prompts,
-   `explain()`, `side_check()` and `DISCLAIMER_BN`. Do not launch the Gradio UI.
-3. Paste and run the cells from [`colab/serve_cells.md`](colab/serve_cells.md):
-   * **S1** checks that the notebook objects exist and records the torch /
-     transformers / trl versions.
-   * **S2** installs `fastapi`, `uvicorn`, `python-multipart` and `qrcode`
-     with a constraints file built from `pip freeze`, so pip cannot upgrade or
-     reinstall torch, transformers or anything else. It then asserts the
-     versions did not change and clones this repository for the server code.
-   * **S3** binds the already-loaded model. The prompts are the notebook's
-     own `PROMPT_WITH_CAPTION` / `PROMPT_IMAGE_ONLY` objects, passed in rather
-     than retyped, so they stay byte-for-byte identical. Flags: `MAX_IMG_SIDE`
-     (default 512) and `CONTENT_ORDER` (default image first).
-   * **S4** (optional, recommended once) proves the server path gives the
-     same text as the notebook's `explain()`, and **measures real latency**
-     on your GPU.
-   * **S5** starts uvicorn in a background thread, starts a cloudflared quick
-     tunnel (no account needed), checks `/health` locally and through the
-     public URL, and prints the **URL, a new random API key and a QR code**.
-   * **S6** (optional) sends one real job through the public URL and prints
-     the end-to-end time.
-
-### 2. Phone (app)
-
-1. Open `android/` in Android Studio (a recent stable version with JDK 17+),
-   let Gradle sync, and run on a phone (Android 8.0 / API 26 or newer), or run
-   `./gradlew assembleDebug` and install `app/build/outputs/apk/debug/app-debug.apk`.
-2. In the app: **Settings → Scan QR**, then point the camera at the QR code in
-   Colab. You can also paste the URL and key by hand. The app saves both and
-   runs **Test connection**, which checks `/health` and that the key is accepted.
-3. Back on Home the chip should say **Ready**. Pick an image, paste its
-   English caption (optional, but it improves accuracy), and tap **Analyze**.
-
-The URL and key are entered at runtime and stored only on the phone (DataStore,
-excluded from backup). They are never compiled into the APK.
-
-## Why the server shrinks images to 512 px (and other differences between the notebooks)
-
-These differences between the fine-tune notebook and the inference notebook
-are handled openly:
-
-1. **Image size.** Training ran `img.convert("RGB")` and then
-   `img.thumbnail((512, 512))`. The inference notebook sent full-resolution
-   images. The model was fine-tuned only on images no larger than 512 px, so
-   the server applies the same shrink by default (`MAX_IMG_SIDE = 512`).
-   A side benefit is fewer vision tokens, so inference is faster and uses less
-   memory. Set `MAX_IMG_SIDE = None` in S3 to reproduce the old notebook
-   behaviour exactly.
-2. **Content order.** Training put `[text, image]` in the user turn, while
-   the inference notebook uses `[image, text]`. The server keeps the
-   inference notebook's order (the tested path). `CONTENT_ORDER = TEXT_FIRST`
-   in S3 switches to the training order.
-3. **EXIF rotation.** Phone photos can carry an EXIF orientation tag, so the
-   server applies `ImageOps.exif_transpose` before converting to RGB.
-
-The app uploads the original file bytes. It never resizes, recompresses or
-Base64-encodes them, so all preprocessing happens in one place (the server).
 
 ## Running the tests
 
 ```bash
-# server (no GPU, no torch needed)
-cd server
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
-pytest -q
+cd server && python -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt && pytest -q
 
-# Android (needs the Android SDK)
-cd android
-./gradlew assembleDebug testDebugUnitTest
+cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android SDK
 ```
 
 ## Verification status
 
 | what | status |
 |---|---|
-| Server `pytest` (44 tests, **mock** model) | passing on FastAPI 0.143 / Starlette 1.7 and on FastAPI 0.115 / Starlette 0.38 |
-| Server under real uvicorn in a background thread + curl (**mock** model) | worked: upload → queued → running → completed, 512 px shrink applied, 401 without key |
-| Android logic: ViewModels, error mapping, URL/QR parsing, DTO mapping, repository against MockWebServer (49 tests) | passing, compiled with Kotlin 2.2.21 and the app's Retrofit/OkHttp/serialization versions in a JVM-only harness with small `androidx.lifecycle` stand-ins |
-| `./gradlew assembleDebug testDebugUnitTest` | **not run yet**: the environment it was written in could not reach Google's Maven repository or download the Android SDK. Compose UI code has not been compiled. |
-| Real model through the API (Colab GPU) | **needs a live Colab session**: use S4 (parity + latency), S6 and the checklist below |
-| The original notebooks | were **not available** while this was written. Nothing is retyped from them: the server reuses the notebook's own prompt objects, model and `side_check` at runtime, and S4 checks that its output matches the notebook's `explain()`. |
-
-If Gradle cannot resolve a version from `gradle/libs.versions.toml` on your
-machine, accept Android Studio's suggested update for that entry.
+| Server `pytest`: 48 tests (**mock** model; real notebook `side_check` and prompts) | passing |
+| Notebook `ROCOv2_Bangla_API_server.ipynb`: every code cell from section 4 on, executed locally with a **fake** model and localhost instead of cloudflared | ran end to end: identical-output check, 512 px shrink, amber warning, QR, real HTTP job |
+| Android logic: 49 unit tests | passing in a JVM-only harness (Kotlin 2.2.21, the app's Retrofit/OkHttp/serialization versions, small `androidx.lifecycle` stand-ins) |
+| `./gradlew assembleDebug testDebugUnitTest` | **not run yet**: the environment this was written in could not reach Google's Maven repository or download the Android SDK. Compose UI code has not been compiled. Run it in Android Studio (step 2). |
+| Real model on a Colab GPU | **needs your live Colab session**: sections 8 and 10, then the checklist below |
 
 ## Troubleshooting
 
 | symptom | cause | fix |
 |---|---|---|
-| Chip says **Offline**; error "Cannot reach the server" | Colab disconnected, the runtime was stopped, or the **tunnel URL changed** (a new URL comes with every S5 run) | Re-run the model cells and S1–S5 in Colab, then **Scan QR** again in Settings |
-| **401** / "API key was not accepted" | S5 was re-run, which made a new key, or the key was mistyped | Scan the new QR code |
-| **429** / "queue full" | 5 jobs are already waiting on the single GPU | Wait a minute, then retry |
-| "No answer after 5 minutes" (timeout) | GPU overloaded, very slow generation, or Colab stopped mid-job | Check the Colab tab is still running, then retry. S4/S6 show the real per-job time on your GPU. |
-| "Model is still loading" (503) | the server is up but `status` is not `ready` | Wait for S3/S5 to finish |
-| "The server no longer has this job" | jobs expire after 15 min, or the server restarted | Retry: a new job is created |
-| GPU out of memory | another process (e.g. Gradio) is using the T4, or a very large image with `MAX_IMG_SIDE = None` | The server frees the cache and keeps running. Close other GPU users, keep `MAX_IMG_SIDE = 512`, retry. If it repeats, restart the runtime. |
-| Colab disconnected | idle timeout or the ~12 h session limit | Reconnect, re-run all cells, scan the new QR code |
-| "QR scanner unavailable" | Google Play services' scanner module not installed or no Play services | Paste the URL and key by hand |
-| S4 prints `Same output … False` | the prompt the server builds differs from the notebook's | Compare `prompt_fn(PARITY_CAPTION)` with `inspect.getsource(explain)` and fix before serving |
-| S2 fails with a pip conflict | a server package needs a newer version of something Colab already has | Nothing was changed. Read the conflict; usually pinning an older `fastapi` in S2 solves it. |
+| Chip **Offline**, "Cannot reach the server" | Colab stopped, or section 9 was re-run (new URL) | Re-run the notebook, **Scan QR** again |
+| **401** / "API key was not accepted" | section 9 was re-run (new key) or a typo | Scan the new QR code |
+| **429** / "queue full" | 5 jobs already waiting on the one GPU | Wait a minute, retry |
+| "No answer after 5 minutes" | very slow generation, or Colab stopped mid-job | Check the Colab tab, retry. Section 8 shows real times on your GPU. |
+| "Model is still loading" (503) | the server is up but the model is not connected yet | Finish sections 6 and 9 |
+| "The server no longer has this job" | jobs expire after 15 min, or the server restarted | Retry (creates a new job) |
+| GPU out of memory | another GPU user (e.g. Gradio) or `MAX_IMG_SIDE = None` | The server frees the cache and keeps running. Keep 512 and close other GPU users; restart the runtime if it repeats. |
+| Section 5 pip error | a server package needs a newer version of something Colab has | Nothing was changed. Read the conflict and pin an older `fastapi` in `SERVER_PKGS`. |
+| Section 6 assertion "… differs" | the notebook's prompts were edited | Use the same prompts as the trained model, or update `notebook_logic.py` and its test hashes on purpose |
+| Section 8 `Same answer … False` | the server code no longer matches `explain()` | Do not serve; compare `inference.py` with section 4 |
+| "QR scanner unavailable" | Play services' scanner module missing | Type the URL and key by hand |
+| Gradle sync fails on a version | a library version is not available on your machine | Accept Android Studio's suggested version in `gradle/libs.versions.toml` |
 
 ## Manual end-to-end checklist (Colab + phone)
 
-Real end-to-end results can only come from a live Colab GPU. Tick each step:
-
-1. [ ] Colab: S5 prints `public /health: {'status': 'ready', …}` and a QR code.
-2. [ ] Phone: Settings → Scan QR → "Connected. Key accepted. Model ready."
-3. [ ] Home chip shows **Ready** (green dot).
-4. [ ] Pick a ROCOv2 test image, paste its English caption, tap **Analyze**.
-   The Analyzing screen shows the queue status ("In queue: next" →
-   "Generating…") and an elapsed timer. Note the time it takes.
-5. [ ] The Result screen shows Bangla text in Noto Sans Bengali, the mode tag
-   "With caption", the model time, a timestamp and the disclaimer. **Copy**
-   works. Compare the text with Colab S4/S6 for the same image: it must be
-   identical (greedy decoding).
-6. [ ] Left/right warning: use `ROCOv2_2023_test_000018` with its caption. If
-   the answer contradicts the caption's side, the **amber** banner "Left/right
-   mismatch with caption — do not trust this answer" appears. Because greedy
-   decoding is deterministic, the notebook's mismatch should reproduce with
-   the same preprocessing. If the 512 px path gives a consistent answer
-   instead, set `MAX_IMG_SIDE = None` in S3, re-run S3 and S5, re-scan, and
-   try again. Write down which setting produced the warning.
-7. [ ] Image only: remove the caption and analyze again. The tag says
-   "Image only" and the banner is grey ("Left/right not checked").
-8. [ ] Rotate the phone while it says "Generating…". Polling continues and no
-   second job is created (the Colab queue length stays at 0–1).
-9. [ ] Tap **Stop waiting** during a job. The app returns to Home and says
-   the server may still finish.
-10. [ ] In Colab, **Runtime → Disconnect and delete runtime**. Within about
-    10 s the chip turns **Offline**. Analyze is disabled. A retry shows
-    "Cannot reach the server…" with **Retry** and **Open Settings**.
-11. [ ] Re-run all cells, scan the new QR code, and check the chip is Ready again.
+1. [ ] Section 9 prints `public /health: {'status': 'ready', …}` and a QR code.
+2. [ ] App: Settings → Scan QR → "Connected. Key accepted. Model ready." The home chip is **Ready**.
+3. [ ] Pick `ROCOv2_2023_test_000216` with its caption → **Analyze**. The
+   Analyzing screen shows "In queue: next" → "Generating…" and a timer.
+   Write down the time.
+4. [ ] The result shows Bangla text (Noto Sans Bengali), "With caption", the
+   model time, a timestamp, the disclaimer and a **green** left/right banner.
+   **Copy** works.
+5. [ ] `ROCOv2_2023_test_000384` with *"Focal right upper lobar opacity on
+   chest X-ray"* → **amber** banner "Left/right mismatch with caption — do not
+   trust this answer". (Section 8 shows the same answer and `WARNING` in Colab.
+   If the answer comes out consistent instead, write down the exact text.)
+6. [ ] Remove the caption → Analyze again → tag "Image only", **grey** banner.
+7. [ ] Rotate the phone during "Generating…": polling continues, and no second
+   job is created.
+8. [ ] **Stop waiting** during a job: back to Home with "the server may still finish".
+9. [ ] Colab: *Runtime › Disconnect and delete runtime*. Within ~10 s the chip
+   shows **Offline**, Analyze is disabled, and a retry explains what to do.
+10. [ ] Re-run the notebook, scan the new QR code, chip **Ready** again.
 
 ## Known limitations
 
-* **Notebook differences** (above): 512 px shrink on by default, image-first
-  order kept from the inference notebook, EXIF rotation added.
-* **Colab lifetime:** idle disconnects and a ~12 h cap. Every restart means a
-  new tunnel URL and a new key (scan the QR code again).
-* **Latency:** Unsloth reports that float16 does not work for qwen3_5 and
-  falls back to float32, so a T4 is slow. No latency figure is claimed here.
-  Measure it with S4/S6 (the app also shows the server's model time per result).
-* **Small training set:** 231 verified rows, about 208 train / 23 validation.
-  (The "28 samples" text in the inference notebook is stale.)
-* **Captions:** the model was trained with captions, so image-only mode is weaker.
-* **Not a chat / VQA model:** it does not answer questions. The caption box
-  takes the image's English caption only.
-* **Left/right check** is a simple word match (বাম/বাঁ vs ডান against
-  "left"/"right" in the caption).
+* The three training/inference differences above (512 px shrink on by default,
+  image-first order, EXIF rotation added).
+* **Colab lifetime:** idle disconnects and a ~12 h cap. The URL and key change
+  on every start.
+* **Latency:** Unsloth logs "Using float16 precision for qwen3_5 won't work!
+  Using float32." on the T4, so inference is slow. No figure is claimed here;
+  section 8/10 and the app's "Model time" show the real value.
+* **Small training set:** 208 training rows. The model mainly learned the
+  style of the Bangla answers, not medical knowledge. Image-only mode is
+  weaker (it was trained with captions).
+* **Not a chat / VQA model:** the caption box takes the image's English caption.
+* **Left/right check** is a simple word match and checks nothing else.
 * **No ROCOv2 Image-ID mode** in the app (see future work).
-* **Not a diagnostic tool**, with no clinical validation.
+* **Not a diagnostic tool.**
 
 ## Future work
 
-* "Fetch by ROCOv2 Image ID" mode from the notebook. It needs the
-  `eltorio/ROCOv2-radiology` dataset in the runtime (tens of GB), so it was
-  left out.
-* A persistent GPU host instead of Colab, so the URL stays fixed.
-* Evaluate image-first vs text-first order and 512 px vs full resolution on
-  the validation split.
+* Image-ID mode in the app (the notebook's section 6). It needs the dataset
+  in the runtime; `colab_runtime.fetch_rocov2_samples` already shows how to
+  pull single IDs shard by shard.
+* A persistent GPU host so the URL stays fixed.
+* Compare image-first vs text-first and 512 px vs full resolution on the 23
+  held-out rows (chrF + human review).
 
 ## Privacy
 
@@ -244,6 +283,6 @@ after 15 minutes. **Do not use real patient images.**
 
 ## Credits and licences
 
-* Base model: `unsloth/Qwen3.5-4B`. Dataset: ROCOv2 (`eltorio/ROCOv2-radiology`).
-* Noto Sans Bengali © The Noto Project Authors, SIL Open Font License 1.1
+* Base model `unsloth/Qwen3.5-4B`; dataset ROCOv2 (`eltorio/ROCOv2-radiology`).
+* Noto Sans Bengali © The Noto Project Authors, SIL OFL 1.1
   (`android/app/src/main/assets/licenses/NotoSansBengali-OFL.txt`).

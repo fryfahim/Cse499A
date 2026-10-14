@@ -2,22 +2,8 @@
 
 import pytest
 
-from inference import IMAGE_FIRST, TEXT_FIRST, build_messages, default_prompt_fn, fill_caption, make_explain_fn
-
-
-def test_fill_caption_placeholder_styles():
-    assert fill_caption("ক্যাপশন: {caption} শেষ", "left lung") == "ক্যাপশন: left lung শেষ"
-    assert fill_caption("ক্যাপশন: {} শেষ", "x") == "ক্যাপশন: x শেষ"
-    # other braces in the prompt are left alone (no str.format)
-    assert fill_caption("{caption} {json}", "a") == "a {json}"
-    with pytest.raises(ValueError):
-        fill_caption("no placeholder", "x")
-
-
-def test_default_prompt_fn_picks_mode():
-    fn = default_prompt_fn("WITH {caption}", "IMAGE ONLY")
-    assert fn("cap") == "WITH cap"
-    assert fn("") == "IMAGE ONLY"
+from inference import IMAGE_FIRST, TEXT_FIRST, build_messages, make_explain_fn
+from notebook_logic import PROMPT_IMAGE_ONLY, PROMPT_WITH_CAPTION
 
 
 def test_build_messages_order():
@@ -27,15 +13,32 @@ def test_build_messages_order():
         build_messages("p", "sideways")
 
 
-class FakeShape:
-    def __init__(self, n):
-        self.shape = (1, n)
+class FakeTensor2D:
+    """Stands in for the (1, n) output tensor; supports out[:, k:]."""
+
+    def __init__(self, ids):
+        self.ids = ids
+        self.shape = (1, len(ids))
+
+    def __getitem__(self, key):
+        rows, cols = key
+        assert rows == slice(None)
+        return FakeTensor2D(self.ids[cols])
 
 
 class FakeBatch(dict):
     def to(self, device):
         self["device"] = device
         return self
+
+
+class FakeImage:
+    def __init__(self):
+        self.converted_to = None
+
+    def convert(self, mode):
+        self.converted_to = mode
+        return f"IMG-{mode}"
 
 
 class FakeTokenizer:
@@ -48,47 +51,52 @@ class FakeTokenizer:
 
     def __call__(self, image, text, **kwargs):
         self.calls["call"] = (image, text, kwargs)
-        return FakeBatch(input_ids=FakeShape(3))
+        return FakeBatch(input_ids=FakeTensor2D([101, 102, 103]))
 
-    def decode(self, tokens, **kwargs):
-        self.calls["decode"] = (list(tokens), kwargs)
-        return "  নতুন টোকেন  \n"
+    def batch_decode(self, tokens, **kwargs):
+        self.calls["decode"] = (tokens.ids, kwargs)
+        return ["  নতুন টোকেন  \n"]
 
 
 class FakeModel:
     def generate(self, **kwargs):
         self.kwargs = kwargs
-        return [[101, 102, 103, 7, 8, 9]]  # 3 prompt tokens + 3 new tokens
+        return FakeTensor2D([101, 102, 103, 7, 8, 9])  # 3 prompt tokens + 3 new tokens
 
 
-def test_explain_fn_mirrors_notebook_settings():
-    tok, model = FakeTokenizer(), FakeModel()
-    fn = make_explain_fn(model, tok, default_prompt_fn("WITH {caption}", "ONLY"))
-    out = fn("IMG", "left lung")
+def test_explain_fn_mirrors_notebook_explain():
+    tok, model, img = FakeTokenizer(), FakeModel(), FakeImage()
+    out = make_explain_fn(model, tok)(img, "  left lung  ")
     assert out == "নতুন টোকেন"
+
     messages, kwargs = tok.calls["template"]
     assert kwargs == {"add_generation_prompt": True, "enable_thinking": False}
-    assert messages[0]["content"][0] == {"type": "image"}
-    assert messages[0]["content"][1]["text"] == "WITH left lung"
+    content = messages[0]["content"]
+    assert content[0] == {"type": "image"}
+    # the notebook's make_prompt strips the caption and uses str.format
+    assert content[1]["text"] == PROMPT_WITH_CAPTION.format(caption="left lung")
+
     image, text, kw = tok.calls["call"]
-    assert (image, text) == ("IMG", "<prompt>")
+    assert img.converted_to == "RGB" and image == "IMG-RGB" and text == "<prompt>"
     assert kw == {"add_special_tokens": False, "return_tensors": "pt"}
+
     gen = {k: v for k, v in model.kwargs.items() if k not in ("input_ids", "device")}
     assert gen == {"max_new_tokens": 512, "use_cache": True, "do_sample": False, "repetition_penalty": 1.05}
+    assert model.kwargs["device"] == "cuda"
+
     tokens, dkw = tok.calls["decode"]
     assert tokens == [7, 8, 9]  # only the new tokens are decoded
     assert dkw == {"skip_special_tokens": True}
 
 
-def test_explain_fn_image_only_and_text_first():
+def test_image_only_prompt_and_text_first_flag():
     tok = FakeTokenizer()
-    fn = make_explain_fn(FakeModel(), tok, default_prompt_fn("WITH {caption}", "ONLY"), content_order=TEXT_FIRST)
-    fn("IMG", "")
+    make_explain_fn(FakeModel(), tok, content_order=TEXT_FIRST)(FakeImage(), "   ")
     content = tok.calls["template"][0][0]["content"]
-    assert content == [{"type": "text", "text": "ONLY"}, {"type": "image"}]
+    assert content == [{"type": "text", "text": PROMPT_IMAGE_ONLY}, {"type": "image"}]
 
 
 def test_bad_order_rejected_at_startup():
     with pytest.raises(ValueError):
-        make_explain_fn(FakeModel(), FakeTokenizer(), lambda c: "", content_order="x")
+        make_explain_fn(FakeModel(), FakeTokenizer(), content_order="x")
     assert IMAGE_FIRST == "image_first"

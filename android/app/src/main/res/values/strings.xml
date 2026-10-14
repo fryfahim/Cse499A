@@ -123,7 +123,7 @@
     <string name="model_finetune_label">Fine-tune</string>
     <string name="model_finetune">LoRA adapter (r = 16, alpha = 16) on vision and language layers, 16-bit</string>
     <string name="model_data_label">Training data</string>
-    <string name="model_data">231 verified ROCOv2 rows (about 208 train / 23 validation), images from the ROCOv2 test split</string>
+    <string name="model_data">231 verified ROCOv2 rows: 208 for training, 23 held out. Images from the ROCOv2 test split, shrunk to 512 px. 3 epochs.</string>
     <string name="model_task_label">Output</string>
     <string name="model_task">2–3 short, simple Bangla sentences: which body part and what problem. No treatment advice.</string>
     <string name="model_decoding_label">Decoding</string>
@@ -136,7 +136,7 @@
 
     <string name="section_limitations">Limitations</string>
     <string name="limit_1">Research prototype, not a diagnostic tool. The explanation may be wrong.</string>
-    <string name="limit_2">Trained on a small set (about 208 examples).</string>
+    <string name="limit_2">Trained on a small set (208 examples). It mainly learned the style of the Bangla answers, not medical knowledge.</string>
     <string name="limit_3">Works best with the English caption. Image-only mode is weaker.</string>
     <string name="limit_4">Runs on a free Colab GPU: slow, and it stops when Colab disconnects. The URL and key change on every restart.</string>
     <string name="limit_5">The server shrinks images to 512 px like training did. The prompt puts the image before the text, as the inference notebook did (training used text first).</string>

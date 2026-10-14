@@ -35,13 +35,13 @@ try:  # Keep uploads in memory: never spool an upload to a temp file on disk.
 except ImportError:  # pragma: no cover - python-multipart missing
     _MultiPartParser = None
 
+from notebook_logic import DISCLAIMER_BN
 from worker import JobError, JobQueue, QueueFull
 
 log = logging.getLogger("rocov2.app")
 
 API_VERSION = "1.0.0"
 MODEL_NAME = "Qwen3.5-4B + LoRA qwen_lora_bangla_radiology"
-DISCLAIMER_BN = "এটি শুধু ছবি বোঝার জন্য সাহায্য। এটি ডাক্তারের পরামর্শ নয়। অনুগ্রহ করে ডাক্তার দেখান।"
 
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
 
@@ -97,6 +97,7 @@ def error_body(code: str, message: str) -> dict:
 
 
 def side_check_level(text: str) -> str:
+    """Map the notebook's side_check() sentence to the API level."""
     if text.startswith("WARNING"):
         return "warning"
     if text.startswith("No caption"):

@@ -17,6 +17,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import GpuHooks, ServerConfig, create_app  # noqa: E402
+from notebook_logic import side_check  # noqa: E402
 
 API_KEY = "test-key-123"
 AUTH = {"X-API-Key": API_KEY}
@@ -45,12 +46,8 @@ class MockExplain:
         return self.text
 
 
-def mock_side_check(caption, bangla):
-    if not caption:
-        return "No caption provided - side check skipped."
-    if "left" in caption.lower() and "ডান" in bangla:
-        return "WARNING: caption says left but the answer says right."
-    return "Side check passed."
+# The REAL left/right check from the inference notebook (not a mock).
+real_side_check = side_check
 
 
 def image_bytes(fmt="JPEG", size=(64, 48), color=(120, 120, 120), exif=None):
@@ -91,7 +88,7 @@ def gpu():
 
 @pytest.fixture
 def make_client(explain, clock, gpu):
-    def _make(explain_fn=explain, config=None, side_check_fn=mock_side_check, start_worker=False):
+    def _make(explain_fn=explain, config=None, side_check_fn=real_side_check, start_worker=False):
         app = create_app(
             explain_fn,
             side_check_fn,
