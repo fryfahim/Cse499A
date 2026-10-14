@@ -108,9 +108,10 @@ def start_cloudflared(port: int = 8000, timeout: float = 60, log_path: str = "/c
 class NgrokTunnel:
     """A tunnel opened with the official ``ngrok`` Python SDK (in-process, no binary)."""
 
-    def __init__(self, url: str, ngrok_module):
+    def __init__(self, url: str, ngrok_module, listener=None):
         self.url = url
         self._ngrok = ngrok_module
+        self._listener = listener  # keep a reference so the tunnel is not garbage-collected
 
     def stop(self) -> None:
         try:
@@ -135,11 +136,46 @@ def start_ngrok(port: int = 8000, authtoken: Optional[str] = None, domain: Optio
     options = {"authtoken": authtoken}
     if domain:
         options["domain"] = domain.strip().removeprefix("https://").rstrip("/")
-    listener = ngrok_module.forward(f"127.0.0.1:{port}", **options)
+    listener = _forward_off_event_loop(ngrok_module, f"127.0.0.1:{port}", options)
     url = listener.url()
     if url.startswith("http://"):
         url = "https://" + url[len("http://"):]
-    return NgrokTunnel(url, ngrok_module)
+    return NgrokTunnel(url, ngrok_module, listener)
+
+
+def _forward_off_event_loop(ngrok_module, addr: str, options: dict, timeout: float = 90.0):
+    """Call ``ngrok.forward`` in a worker thread.
+
+    Colab/Jupyter cells run inside an asyncio event loop. When ``ngrok.forward``
+    sees a running loop it returns an unfinished ``asyncio.Task`` instead of a
+    listener, and that task cannot be awaited from a synchronous cell. A fresh
+    thread has no running loop, so ``forward`` returns the listener directly;
+    if a coroutine still comes back, it is run to completion in that thread.
+    """
+    import asyncio
+    import inspect
+
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            result = ngrok_module.forward(addr, **options)
+            if inspect.isawaitable(result):
+                async def _await(r=result):
+                    return await r
+                result = asyncio.run(_await())
+            box["listener"] = result
+        except BaseException as e:  # noqa: BLE001 - re-raised in the caller
+            box["error"] = e
+
+    worker = threading.Thread(target=run, name="ngrok-forward", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise TimeoutError(f"ngrok did not open the tunnel within {timeout:.0f} s")
+    if "error" in box:
+        raise box["error"]
+    return box["listener"]
 
 
 def colab_secret(name: str) -> Optional[str]:

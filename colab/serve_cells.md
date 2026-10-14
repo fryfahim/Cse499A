@@ -138,7 +138,9 @@ In the app: **Settings → Scan QR** (or paste the URL and key) → **Test conne
 * With both secrets set you scan the QR code **once**, and after a Colab restart the app reconnects by itself.
 
 ```python
-import subprocess, sys
+import subprocess, sys, importlib
+import colab_runtime
+importlib.reload(colab_runtime)   # pick up server code re-downloaded by section 5
 from colab_runtime import (choose_api_key, colab_secret, start_server, local_health,
                            start_cloudflared, start_ngrok, public_health, show_connection)
 

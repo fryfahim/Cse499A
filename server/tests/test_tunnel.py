@@ -57,3 +57,54 @@ def test_api_key_choice():
 
 def test_colab_secret_outside_colab_is_none():
     assert colab_secret("NGROK_AUTHTOKEN") is None
+
+
+class LoopAwareFakeNgrok(FakeNgrok):
+    """Mimics the real SDK: inside a running event loop forward() returns an
+    unfinished asyncio.Task (what broke section 9 in Colab)."""
+
+    def forward(self, addr, **options):
+        import asyncio
+
+        self.calls.append((addr, options))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return FakeListener(self._url)
+
+        async def _open():
+            return FakeListener(self._url)
+
+        return loop.create_task(_open())
+
+
+def test_start_ngrok_inside_running_event_loop_like_colab():
+    import asyncio
+
+    fake = LoopAwareFakeNgrok("https://my-demo.ngrok-free.app")
+
+    async def cell():  # a Colab cell runs while an event loop is running
+        return start_ngrok(8000, authtoken="tok", domain="my-demo.ngrok-free.app", ngrok_module=fake)
+
+    tunnel = asyncio.run(cell())
+    assert tunnel.url == "https://my-demo.ngrok-free.app"
+
+
+def test_start_ngrok_awaits_coroutine_result():
+    class CoroFakeNgrok(FakeNgrok):
+        def forward(self, addr, **options):
+            async def _open():
+                return FakeListener(self._url)
+            return _open()
+
+    tunnel = start_ngrok(8000, authtoken="tok", ngrok_module=CoroFakeNgrok("https://x.ngrok-free.app"))
+    assert tunnel.url == "https://x.ngrok-free.app"
+
+
+def test_start_ngrok_errors_propagate():
+    class FailingNgrok(FakeNgrok):
+        def forward(self, addr, **options):
+            raise RuntimeError("ERR_NGROK_334 domain is already in use")
+
+    with pytest.raises(RuntimeError, match="ERR_NGROK_334"):
+        start_ngrok(8000, authtoken="tok", ngrok_module=FailingNgrok())
