@@ -105,13 +105,64 @@ def start_cloudflared(port: int = 8000, timeout: float = 60, log_path: str = "/c
     raise RuntimeError(f"cloudflared did not report a URL; see {log_path}")
 
 
-def start_ngrok(port: int = 8000) -> str:
-    """Alternative tunnel. Reads NGROK_AUTHTOKEN from Colab Secrets."""
-    from google.colab import userdata  # type: ignore
-    from pyngrok import ngrok  # type: ignore
+class NgrokTunnel:
+    """A tunnel opened with the official ``ngrok`` Python SDK (in-process, no binary)."""
 
-    ngrok.set_auth_token(userdata.get("NGROK_AUTHTOKEN"))
-    return ngrok.connect(port, "http").public_url.replace("http://", "https://")
+    def __init__(self, url: str, ngrok_module):
+        self.url = url
+        self._ngrok = ngrok_module
+
+    def stop(self) -> None:
+        try:
+            self._ngrok.disconnect(self.url)
+        except Exception:  # noqa: BLE001 - already closed
+            pass
+
+
+def start_ngrok(port: int = 8000, authtoken: Optional[str] = None, domain: Optional[str] = None,
+                ngrok_module=None) -> NgrokTunnel:
+    """Open an HTTPS ngrok tunnel to the local server.
+
+    ``authtoken``: from the ngrok dashboard (Colab secret NGROK_AUTHTOKEN).
+    ``domain``: optional static domain, e.g. ``something.ngrok-free.app`` (every
+    ngrok account can claim one under Domains). With it the URL stays the same
+    after every Colab restart. Without it ngrok picks a new random URL.
+    """
+    if ngrok_module is None:
+        import ngrok as ngrok_module  # type: ignore
+    if not authtoken:
+        raise ValueError("ngrok needs an authtoken: add the Colab secret NGROK_AUTHTOKEN")
+    options = {"authtoken": authtoken}
+    if domain:
+        options["domain"] = domain.strip().removeprefix("https://").rstrip("/")
+    listener = ngrok_module.forward(f"127.0.0.1:{port}", **options)
+    url = listener.url()
+    if url.startswith("http://"):
+        url = "https://" + url[len("http://"):]
+    return NgrokTunnel(url, ngrok_module)
+
+
+def colab_secret(name: str) -> Optional[str]:
+    """Value of a Colab secret (key icon in the left sidebar), or None if it is
+    missing or this notebook has not been given access to it."""
+    try:
+        from google.colab import userdata  # type: ignore
+
+        value = userdata.get(name)
+    except Exception:  # noqa: BLE001 - SecretNotFoundError, NotebookAccessError, not in Colab
+        return None
+    value = (value or "").strip()
+    return value or None
+
+
+def choose_api_key(fixed: Optional[str]) -> str:
+    """Use a fixed key from the Colab secret APP_API_KEY if it is long enough,
+    so the phone keeps working after a restart; otherwise make a new random key."""
+    if fixed and len(fixed) >= 16:
+        return fixed
+    if fixed:
+        print("APP_API_KEY is shorter than 16 characters, so a random key is used instead.")
+    return new_api_key()
 
 
 def public_health(url: str, timeout: float = 90) -> dict:
@@ -121,7 +172,11 @@ def public_health(url: str, timeout: float = 90) -> dict:
     last_error: Optional[Exception] = None
     while time.time() < deadline:
         try:
-            req = urllib.request.Request(f"{url}/health", headers={"User-Agent": "rocov2-selftest"})
+            req = urllib.request.Request(
+                f"{url}/health",
+                # The header skips ngrok's browser warning page on free domains.
+                headers={"User-Agent": "rocov2-selftest", "ngrok-skip-browser-warning": "true"},
+            )
             with urllib.request.urlopen(req, timeout=15) as r:
                 return json.loads(r.read().decode())
         except Exception as exc:  # noqa: BLE001

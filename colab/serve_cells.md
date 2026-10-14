@@ -4,16 +4,18 @@ The easiest way is to open **`colab/ROCOv2_Bangla_API_server.ipynb`** in Colab a
 
 If you prefer your existing inference notebook, run its sections 1–4 (install, settings, Drive + model, prompt + `explain()` + `side_check()`), skip sections 5–7 (upload, image ID, Gradio), and paste these cells after section 4.
 
+**ngrok setup (once):** sign up at ngrok.com, copy your authtoken (*Getting Started › Your Authtoken*) and claim your free static domain (*Domains*). In Colab open **Secrets** (key icon, left sidebar) and add `NGROK_AUTHTOKEN` (required), `NGROK_DOMAIN` (optional, e.g. `something.ngrok-free.app`) and `APP_API_KEY` (optional, 16+ random characters), each with **Notebook access** on.
+
 ### 5. Install the server packages and get the server code
-Installs `fastapi`, `uvicorn`, `python-multipart` and `qrcode` with every package that is already installed pinned to its current version, so torch, transformers, trl and unsloth cannot change. Then it downloads the server code from GitHub.
+Installs `fastapi`, `uvicorn`, `python-multipart`, `qrcode` and `ngrok` (the official ngrok Python SDK) with every package that is already installed pinned to its current version, so torch, transformers, trl and unsloth cannot change. Then it downloads the server code from GitHub.
 
 ```python
 import re, subprocess, sys, importlib.metadata as md
 
 PINNED_BEFORE = {p: md.version(p) for p in ("torch", "transformers", "trl", "unsloth")}
 
-SERVER_PKGS = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "qrcode[pil]>=7.4"]
-UPGRADABLE = {"fastapi", "starlette", "uvicorn", "python-multipart", "qrcode"}
+SERVER_PKGS = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "qrcode[pil]>=7.4", "ngrok>=1.4"]
+UPGRADABLE = {"fastapi", "starlette", "uvicorn", "python-multipart", "qrcode", "ngrok"}
 freeze = subprocess.run([sys.executable, "-m", "pip", "freeze"], capture_output=True, text=True).stdout
 pins = [line for line in freeze.splitlines()
         if re.match(r"^[A-Za-z0-9_.\-]+==", line)
@@ -66,7 +68,7 @@ print("Server prompts, disclaimer and side_check() are identical to this noteboo
 MAX_IMG_SIDE  = 512           # None = full resolution
 CONTENT_ORDER = IMAGE_FIRST   # or TEXT_FIRST
 PORT          = 8000
-TUNNEL        = "cloudflared" # or "ngrok" (needs NGROK_AUTHTOKEN in Colab Secrets)
+TUNNEL        = "ngrok"       # "ngrok" (Colab secrets NGROK_AUTHTOKEN, optional NGROK_DOMAIN) or "cloudflared" (no account)
 # -----------------------------------------------------------------------------
 
 explain_fn = make_explain_fn(model, tokenizer, content_order=CONTENT_ORDER)
@@ -127,16 +129,18 @@ assert ours_full == theirs, "Server code does not match explain(). Do not serve 
 ```
 
 ### 9. Start the API and show the QR code
-Starts the server in the background (the notebook stays usable), opens a free HTTPS tunnel, checks `/health` locally and through the public URL, and prints the **URL**, a new random **API key** and a **QR code**.
+Starts the server in the background (the notebook stays usable), opens the **ngrok** HTTPS tunnel, checks `/health` locally and through the public URL, and prints the **URL**, the **API key** and a **QR code**.
 
 In the app: **Settings → Scan QR** (or paste the URL and key) → **Test connection**.
 
-Every run of this cell makes a new URL and key, so scan again after re-running it.
+* URL: your `NGROK_DOMAIN` if set (the same every time), otherwise a new random ngrok URL on every run.
+* API key: your `APP_API_KEY` secret if set (the same every time), otherwise a new random key on every run.
+* With both secrets set you scan the QR code **once**, and after a Colab restart the app reconnects by itself.
 
 ```python
 import subprocess, sys
-from colab_runtime import (new_api_key, start_server, local_health, start_cloudflared,
-                           start_ngrok, public_health, show_connection)
+from colab_runtime import (choose_api_key, colab_secret, start_server, local_health,
+                           start_cloudflared, start_ngrok, public_health, show_connection)
 
 for _name in ("SERVER", "TUNNEL_PROC"):   # re-running: stop the previous server and tunnel
     try:
@@ -144,14 +148,19 @@ for _name in ("SERVER", "TUNNEL_PROC"):   # re-running: stop the previous server
     except (KeyError, AttributeError):
         pass
 
-API_KEY = new_api_key()
+API_KEY = choose_api_key(colab_secret("APP_API_KEY"))
 fastapi_app = create_app(explain_fn, side_check, api_key=API_KEY, config=config)
 SERVER = start_server(fastapi_app, port=PORT)
 print("local /health:", local_health(PORT))
 
 if TUNNEL == "ngrok":
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-c", "/content/server_constraints.txt", "pyngrok"], check=True)
-    PUBLIC_URL = start_ngrok(PORT)
+    _token = colab_secret("NGROK_AUTHTOKEN")
+    if not _token:
+        SERVER.stop()
+        raise RuntimeError("Add your ngrok authtoken as the Colab secret NGROK_AUTHTOKEN (key icon, left sidebar) "
+                           "and turn on Notebook access. See the first cell of this notebook.")
+    TUNNEL_PROC = start_ngrok(PORT, authtoken=_token, domain=colab_secret("NGROK_DOMAIN"))
+    PUBLIC_URL = TUNNEL_PROC.url
 else:
     TUNNEL_PROC = start_cloudflared(PORT)
     PUBLIC_URL = TUNNEL_PROC.url
@@ -172,7 +181,7 @@ if "PARITY_BYTES" not in globals():
     _up = files.upload(); PARITY_BYTES = _up[next(iter(_up))]
     PARITY_CAPTION = input("English caption (optional): ")
 
-hdr = {"X-API-Key": API_KEY}
+hdr = {"X-API-Key": API_KEY, "ngrok-skip-browser-warning": "true"}
 t0 = time.time()
 r = requests.post(f"{PUBLIC_URL}/api/v1/jobs", headers=hdr, timeout=60,
                   files={"image": ("image.jpg", PARITY_BYTES)}, data={"caption": PARITY_CAPTION})
@@ -204,6 +213,8 @@ print("Server and tunnel stopped. The app will show Offline.")
 ```
 
 ### Notes
-* **Colab disconnects** after idling and after about 12 hours. Then run everything again from the top. The adapter on Google Drive stays. The URL and key will be new, so scan the new QR code.
-* **Privacy:** uploads are held in memory only and dropped after inference. The server does not log images, captions or answers. Traffic still passes through Cloudflare's public tunnel, so do not use real patient images.
-* cloudflared's log is in `/content/cloudflared.log`.
+* **Colab disconnects** after idling and after about 12 hours. Then run everything again from the top. The adapter on Google Drive stays. With `NGROK_DOMAIN` and `APP_API_KEY` set, the app reconnects by itself; otherwise scan the new QR code.
+* **ngrok free plan** has monthly limits on requests and data, shown in your ngrok dashboard. The app checks `/health` every 10 s while it is open and polls every 2 s during a job. Close the app when you are not using it.
+* **One tunnel per domain:** if section 9 fails with "domain is already in use", the old session is still connected. Run *Stop the server*, wait a few seconds and run section 9 again (or restart the runtime).
+* **Privacy:** uploads are held in memory only and dropped after inference. The server does not log images, captions or answers. Traffic still passes through ngrok's public servers, so do not use real patient images.
+* Alternative without an account: set `TUNNEL = "cloudflared"` in section 6 (random URL on every run; log in `/content/cloudflared.log`).

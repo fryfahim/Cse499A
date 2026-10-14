@@ -41,7 +41,15 @@ val ApiJson: Json = Json {
     coerceInputValues = true
 }
 
+/** Free ngrok domains can answer with an HTML warning page instead of
+ *  forwarding the request; this header tells ngrok to skip it. Harmless
+ *  for other tunnels. */
+const val NGROK_SKIP_WARNING_HEADER = "ngrok-skip-browser-warning"
+
 fun defaultOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    .addInterceptor { chain ->
+        chain.proceed(chain.request().newBuilder().header(NGROK_SKIP_WARNING_HEADER, "true").build())
+    }
     .connectTimeout(15, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS)
     .writeTimeout(60, TimeUnit.SECONDS)

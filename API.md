@@ -1,15 +1,20 @@
 # ROCOv2 Bangla API (v1.0.0)
 
 The FastAPI server in `server/` runs inside the Colab runtime that has the
-model loaded. A cloudflared quick tunnel (or ngrok) makes it reachable over
-HTTPS. The Android app is its only intended client.
+model loaded. An ngrok tunnel (default; cloudflared as a fallback) makes it
+reachable over HTTPS, e.g. `https://<your-static-domain>.ngrok-free.app`. The Android app is its only intended client.
 
 * Every response body is JSON.
 * Every endpoint except `GET /health` requires the header `X-API-Key: <key>`.
   The key is random, generated each time the server cell runs, and printed
   in Colab next to the URL and QR code.
 * Error bodies never contain stack traces, file paths, captions or model output.
-* Jobs are **asynchronous**. Cloudflare cuts proxied requests at about 100 s,
+* The app also sends `ngrok-skip-browser-warning: true` on every request, so
+  free ngrok domains never answer with their HTML warning page.
+* When Colab is stopped, ngrok itself answers (e.g. 404 `ERR_NGROK_3200`,
+  502 `ERR_NGROK_8012`) without our JSON error body; the app treats any such
+  response as **Offline**.
+* Jobs are **asynchronous**. Tunnels cut long proxied requests (Cloudflare at about 100 s),
   and float32 inference on a T4 can get close to that, so the client creates
   a job and then polls it.
 
@@ -123,10 +128,10 @@ NOT_FOUND` means the key was accepted, `401 UNAUTHORIZED` means it was not.
 ## Example (curl)
 
 ```bash
-URL=https://<random>.trycloudflare.com
+URL=https://<your-static-domain>.ngrok-free.app
 KEY=<key printed in Colab>
 
-curl -s $URL/health
+curl -s -H "ngrok-skip-browser-warning: true" $URL/health
 curl -s -H "X-API-Key: $KEY" -F image=@ROCOv2_2023_test_000018.jpg \
      -F "caption=<English caption>" $URL/api/v1/jobs
 curl -s -H "X-API-Key: $KEY" $URL/api/v1/jobs/<job_id>

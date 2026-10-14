@@ -6,7 +6,6 @@ import edu.cse499a.rocobangla.core.ServerSettings
 import edu.cse499a.rocobangla.picked
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -30,7 +29,7 @@ class NetworkAnalysisRepositoryTest {
         settings = FakeSettingsRepository(ServerSettings(server.url("/").toString().trimEnd('/'), "secret-key"))
         repo = NetworkAnalysisRepository(
             settingsRepository = settings,
-            apiFactory = RocoApiFactory(OkHttpClient()),
+            apiFactory = RocoApiFactory(defaultOkHttpClient()),
             uploadBodyFactory = { "JPEGBYTES".toByteArray().toRequestBody("image/jpeg".toMediaType()) },
         )
     }
@@ -52,6 +51,7 @@ class NetworkAnalysisRepositoryTest {
         assertEquals("POST", req.method)
         assertEquals("/api/v1/jobs", req.path)
         assertEquals("secret-key", req.getHeader("X-API-Key"))
+        assertEquals("true", req.getHeader(NGROK_SKIP_WARNING_HEADER))
         val body = req.body.readUtf8()
         assertTrue(req.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
         assertTrue(body.contains("name=\"image\"; filename=\"xray.jpg\""))
@@ -101,6 +101,9 @@ class NetworkAnalysisRepositoryTest {
     fun healthNeedsNoKeyButKeyCheckDoes() = runTest {
         server.enqueue(json(200, """{"status":"ready","model":"m","queue_length":0,"busy":false,"version":"1.0.0"}"""))
         assertEquals(Outcome.Success(ServerHealth(ModelStatus.Ready, 0, false)), repo.health())
+        val healthRequest = server.takeRequest()
+        assertEquals("true", healthRequest.getHeader(NGROK_SKIP_WARNING_HEADER))
+        assertEquals(null, healthRequest.getHeader("X-API-Key"))
 
         server.enqueue(json(404, """{"error":{"code":"NOT_FOUND","message":"x"}}"""))
         assertEquals(Outcome.Success(Unit), repo.verifyKey())
@@ -112,6 +115,15 @@ class NetworkAnalysisRepositoryTest {
     fun nonJsonSuccessIsServerError() = runTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody("<html>not our server</html>"))
         assertEquals(Outcome.Failure(AppError.ServerError), repo.health())
+    }
+
+    @Test
+    fun ngrokOfflineEndpointIsOffline() = runTest {
+        // ngrok answers ERR_NGROK_3200 (404, not our JSON) when Colab is not connected.
+        server.enqueue(MockResponse().setResponseCode(404).setBody("ERR_NGROK_3200 endpoint is offline"))
+        assertEquals(Outcome.Failure(AppError.Offline), repo.health())
+        server.enqueue(MockResponse().setResponseCode(502).setBody("ERR_NGROK_8012"))
+        assertEquals(Outcome.Failure(AppError.Offline), repo.job("abc"))
     }
 
     @Test

@@ -86,16 +86,16 @@
     <string name="err_inference_failed">The model failed while generating (for example, the GPU ran out of memory). Retry.</string>
     <string name="err_unauthorized">The API key was not accepted. Scan the new QR code from the Colab notebook.</string>
     <string name="err_job_not_found">The server no longer has this job. Colab may have restarted. Retry to submit again.</string>
-    <string name="err_offline">Cannot reach the server. Colab may have stopped or the tunnel URL changed. Re-run the server cells in Colab, then scan the new QR code.</string>
+    <string name="err_offline">Cannot reach the server. Colab may have stopped. Re-run the Colab notebook; if the URL or key changed, scan the new QR code.</string>
     <string name="err_timeout">No answer after 5 minutes. The server may be overloaded or Colab may have stopped. Retry.</string>
     <string name="err_not_configured">No server set up yet. Open Settings and scan the QR code from Colab.</string>
     <string name="err_server_error">The server sent an unexpected answer. Check the URL in Settings, then retry.</string>
 
     <!-- Settings -->
     <string name="section_server">Colab server</string>
-    <string name="server_help">In Colab, run the server cells. They print a URL, an API key and a QR code. Both change every time the cells are re-run.</string>
+    <string name="server_help">In Colab, run the server notebook. Section 9 prints a URL, an API key and a QR code. With an ngrok static domain and the APP_API_KEY secret, both stay the same after a restart; otherwise scan the new QR code.</string>
     <string name="url_label">Server URL</string>
-    <string name="url_placeholder">https://….trycloudflare.com</string>
+    <string name="url_placeholder">https://….ngrok-free.app</string>
     <string name="key_label">API key</string>
     <string name="show">Show</string>
     <string name="hide">Hide</string>
@@ -138,7 +138,7 @@
     <string name="limit_1">Research prototype, not a diagnostic tool. The explanation may be wrong.</string>
     <string name="limit_2">Trained on a small set (208 examples). It mainly learned the style of the Bangla answers, not medical knowledge.</string>
     <string name="limit_3">Works best with the English caption. Image-only mode is weaker.</string>
-    <string name="limit_4">Runs on a free Colab GPU: slow, and it stops when Colab disconnects. The URL and key change on every restart.</string>
+    <string name="limit_4">Runs on a free Colab GPU through an ngrok tunnel: slow, and it stops when Colab disconnects. Without an ngrok static domain the URL changes on every restart.</string>
     <string name="limit_5">The server shrinks images to 512 px like training did. The prompt puts the image before the text, as the inference notebook did (training used text first).</string>
     <string name="limit_6">The left/right check only compares the words left/right in the caption with the Bangla answer.</string>
 

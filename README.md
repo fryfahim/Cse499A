@@ -12,7 +12,7 @@ and what problem it has.
 > patient data**, so use only public dataset images such as ROCOv2.
 
 ```
-Android app ──HTTPS──> cloudflared quick tunnel ──> FastAPI (background thread in the Colab runtime)
+Android app ──HTTPS──> ngrok tunnel (your static *.ngrok-free.app domain) ──> FastAPI (background thread in the Colab runtime)
                                                      └─> one GPU worker ──> the notebook's model ──> result
 ```
 
@@ -21,8 +21,32 @@ Android app ──HTTPS──> cloudflared quick tunnel ──> FastAPI (backgro
 ## How to run it
 
 You need: the Google account whose Drive holds `qwen_lora_bangla_radiology`
-(saved by the fine-tune notebook), a computer with Android Studio, and an
-Android phone (Android 8.0 or newer) with Google Play services.
+(saved by the fine-tune notebook), a free **ngrok** account, a computer with
+Android Studio, and an Android phone (Android 8.0 or newer) with Google Play
+services.
+
+### Step 0: Set up ngrok (once, 5 min)
+
+1. Sign up free at **ngrok.com** and open the dashboard.
+2. *Getting Started › **Your Authtoken*** → copy the token.
+3. **Domains** (under *Universal Gateway* in newer dashboards) →
+   claim your **free static domain**, e.g. `something-random.ngrok-free.app`.
+   With it the server URL is the same every time, so the app keeps working
+   after a Colab restart. This step is optional but strongly recommended.
+4. Make an API key for the app: any random text of 16+ characters, for example
+   from a password generator.
+5. In Colab, open the notebook from Step 1 → click the **key icon (Secrets)**
+   in the left sidebar → add these secrets and switch **Notebook access** on
+   for each:
+
+   | name | value | required? |
+   |---|---|---|
+   | `NGROK_AUTHTOKEN` | the token from 2 | yes |
+   | `NGROK_DOMAIN` | the domain from 3, e.g. `something-random.ngrok-free.app` | recommended |
+   | `APP_API_KEY` | the text from 4 | recommended (otherwise a new random key on every start) |
+
+   Colab Secrets belong to your Google account and are not saved in the
+   notebook file or in this repository. Never paste the token into a code cell.
 
 ### Step 1: Start the server in Colab (about 10–15 min the first time)
 
@@ -37,11 +61,11 @@ Android phone (Android 8.0 or newer) with Google Play services.
    | 2. Settings | `ADAPTER_PATH = /content/drive/MyDrive/qwen_lora_bangla_radiology` | yes |
    | 3. Drive + model | mount Drive (allow access), load the adapter | yes |
    | 4. Prompt + `explain()` + `side_check()` | unchanged from your inference notebook | yes |
-   | 5. Server packages | installs fastapi/uvicorn/qrcode **without changing torch/transformers** (it checks), downloads the server code | yes |
+   | 5. Server packages | installs fastapi/uvicorn/qrcode/ngrok **without changing torch/transformers** (it checks), downloads the server code | yes |
    | 6. Connect the model | checks the server's copy of the prompts/`side_check` is identical to section 4, wraps the loaded model | yes |
    | 7. Demo images | saves 5 ROCOv2 test images + captions to Drive folder `rocov2_demo_images` | optional |
    | 8. Parity + latency | proves the server gives the same text as `explain()`, and measures real seconds per image on your T4 | optional, do it once |
-   | 9. Start the API | prints the **Server URL**, **API key** and a **QR code** | yes |
+   | 9. Start the API | starts the server and the **ngrok** tunnel; prints the **Server URL** (`https://<your domain>`), **API key** and a **QR code** | yes |
    | 10. Self-test | sends one real job through the public URL | optional |
 
 4. **Leave the Colab tab open** while you use the app.
@@ -98,9 +122,11 @@ answer" banner.
 
 ### When Colab stops
 
-Colab disconnects after idling and after ~12 h, and the tunnel URL and key
-change every time section 9 runs. The app then shows **Offline**. Fix: run the
-notebook again from the top, then **Settings › Scan QR** again.
+Colab disconnects after idling and after ~12 h. The app then shows **Offline**.
+Run the notebook again from the top.
+* With `NGROK_DOMAIN` **and** `APP_API_KEY` set, the URL and key are the same
+  as before: the chip turns **Ready** again by itself within ~10 s. Nothing to scan.
+* Without them, the URL and/or key are new: **Settings › Scan QR** again.
 
 ---
 
@@ -184,7 +210,7 @@ server/
   inference.py                   explain_fn: the notebook's explain(), plus the content-order flag
   app.py                         FastAPI app (explain_fn / side_check_fn injected; testable without a GPU)
   worker.py                      FIFO queue (cap 5), single GPU worker thread, in-memory jobs, 15 min expiry
-  colab_runtime.py               uvicorn thread, cloudflared/ngrok, URL + key + QR, demo-image fetcher
+  colab_runtime.py               uvicorn thread, ngrok tunnel (cloudflared fallback), Colab secrets, URL + key + QR, demo images
   requirements.txt, requirements-dev.txt
   tests/                         pytest (API tests use a clearly labelled MOCK model)
 API.md                           the API contract
@@ -203,9 +229,9 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 
 | what | status |
 |---|---|
-| Server `pytest`: 48 tests (**mock** model; real notebook `side_check` and prompts) | passing |
-| Notebook `ROCOv2_Bangla_API_server.ipynb`: every code cell from section 4 on, executed locally with a **fake** model and localhost instead of cloudflared | ran end to end: identical-output check, 512 px shrink, amber warning, QR, real HTTP job |
-| Android logic: 49 unit tests | passing in a JVM-only harness (Kotlin 2.2.21, the app's Retrofit/OkHttp/serialization versions, small `androidx.lifecycle` stand-ins) |
+| Server `pytest`: 53 tests (**mock** model; real notebook `side_check` and prompts) | passing |
+| Notebook `ROCOv2_Bangla_API_server.ipynb`: every code cell from section 4 on, executed locally with a **fake** model, fake Colab Secrets and a fake ngrok SDK pointed at localhost | ran end to end: identical-output check, 512 px shrink, amber warning, QR, real HTTP job |
+| Android logic: 50 unit tests | passing in a JVM-only harness (Kotlin 2.2.21, the app's Retrofit/OkHttp/serialization versions, small `androidx.lifecycle` stand-ins) |
 | `./gradlew assembleDebug testDebugUnitTest` | **not run yet**: the environment this was written in could not reach Google's Maven repository or download the Android SDK. Compose UI code has not been compiled. Run it in Android Studio (step 2). |
 | Real model on a Colab GPU | **needs your live Colab session**: sections 8 and 10, then the checklist below |
 
@@ -213,7 +239,12 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 
 | symptom | cause | fix |
 |---|---|---|
-| Chip **Offline**, "Cannot reach the server" | Colab stopped, or section 9 was re-run (new URL) | Re-run the notebook, **Scan QR** again |
+| Chip **Offline**, "Cannot reach the server" | Colab stopped (ngrok answers `ERR_NGROK_3200` "endpoint is offline"), or the URL changed (no `NGROK_DOMAIN`) | Re-run the notebook; scan again only if the URL/key changed |
+| Section 9: "Add your ngrok authtoken…" | secret `NGROK_AUTHTOKEN` missing or Notebook access off | Step 0, item 5 |
+| Section 9: ngrok error "authentication failed" / `ERR_NGROK_105` | wrong or revoked token | Copy the token again from the ngrok dashboard |
+| Section 9: "domain is already in use" / `ERR_NGROK_334` | an earlier session still holds your static domain (e.g. a second Colab tab) | Run *Stop the server* or close the other runtime, wait ~10 s, run section 9 again |
+| Section 9: domain not allowed / not found | `NGROK_DOMAIN` has a typo or is not claimed on this account | Copy it exactly from *Domains* (no `https://` needed) |
+| Many errors after heavy use | ngrok free-plan monthly request/data limit reached (see your ngrok dashboard) | Wait for the reset, or use `TUNNEL = "cloudflared"` in section 6 |
 | **401** / "API key was not accepted" | section 9 was re-run (new key) or a typo | Scan the new QR code |
 | **429** / "queue full" | 5 jobs already waiting on the one GPU | Wait a minute, retry |
 | "No answer after 5 minutes" | very slow generation, or Colab stopped mid-job | Check the Colab tab, retry. Section 8 shows real times on your GPU. |
@@ -223,7 +254,7 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 | Section 5 pip error | a server package needs a newer version of something Colab has | Nothing was changed. Read the conflict and pin an older `fastapi` in `SERVER_PKGS`. |
 | Section 6 assertion "… differs" | the notebook's prompts were edited | Use the same prompts as the trained model, or update `notebook_logic.py` and its test hashes on purpose |
 | Section 8 `Same answer … False` | the server code no longer matches `explain()` | Do not serve; compare `inference.py` with section 4 |
-| "QR scanner unavailable" | Play services' scanner module missing | Type the URL and key by hand |
+| "QR scanner unavailable" | Play services' scanner module missing | Type the URL (`https://<your domain>`) and key by hand |
 | Gradle sync fails on a version | a library version is not available on your machine | Accept Android Studio's suggested version in `gradle/libs.versions.toml` |
 
 ## Manual end-to-end checklist (Colab + phone)
@@ -246,14 +277,17 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 8. [ ] **Stop waiting** during a job: back to Home with "the server may still finish".
 9. [ ] Colab: *Runtime › Disconnect and delete runtime*. Within ~10 s the chip
    shows **Offline**, Analyze is disabled, and a retry explains what to do.
-10. [ ] Re-run the notebook, scan the new QR code, chip **Ready** again.
+10. [ ] Re-run the notebook. With `NGROK_DOMAIN` + `APP_API_KEY` set, the chip turns
+    **Ready** again **without scanning**; otherwise scan the new QR code.
 
 ## Known limitations
 
 * The three training/inference differences above (512 px shrink on by default,
   image-first order, EXIF rotation added).
-* **Colab lifetime:** idle disconnects and a ~12 h cap. The URL and key change
-  on every start.
+* **Colab lifetime:** idle disconnects and a ~12 h cap. With an ngrok static
+  domain and a fixed `APP_API_KEY` the app reconnects by itself after a restart.
+* **ngrok free plan:** monthly request/data limits and one static domain. The
+  app checks `/health` every 10 s while open and polls every 2 s during a job.
 * **Latency:** Unsloth logs "Using float16 precision for qwen3_5 won't work!
   Using float32." on the T4, so inference is slow. No figure is claimed here;
   section 8/10 and the app's "Model time" show the real value.
@@ -276,7 +310,7 @@ cd android && ./gradlew assembleDebug testDebugUnitTest     # needs the Android 
 
 ## Privacy
 
-Images go to a temporary Colab server through a public tunnel. The server
+Images go to a temporary Colab server through ngrok's public tunnel. The server
 keeps them in memory only, never writes them to disk, deletes them right
 after inference, and does not log images, captions or outputs. Jobs expire
 after 15 minutes. **Do not use real patient images.**
